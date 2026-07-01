@@ -15,7 +15,7 @@ ARG CORE_REF=main
 ARG UI_REPO=https://github.com/nekosuneprojectsforks/restreamer-ui.git
 ARG UI_REF=main
 
-ARG GOLANG_IMAGE=golang:1.22-alpine3.19
+ARG GOLANG_IMAGE=golang:1.24-alpine3.22
 ARG NODE_IMAGE=node:21-alpine3.20
 ARG FFMPEG_IMAGE=datarhei/base:alpine-ffmpeg-latest
 
