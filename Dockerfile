@@ -22,7 +22,7 @@ ARG FFMPEG_IMAGE=datarhei/base:alpine-ffmpeg-latest
 ########################################################################
 # CORE (Go)
 ########################################################################
-FROM alpine:3.19 AS core-src
+FROM --platform=$BUILDPLATFORM alpine:3.19 AS core-src
 
 ARG CORE_REPO
 ARG CORE_REF
@@ -47,7 +47,7 @@ RUN cd /dist/core && \
 ########################################################################
 # UI (React)
 ########################################################################
-FROM alpine:3.19 AS ui-src
+FROM --platform=$BUILDPLATFORM alpine:3.19 AS ui-src
 
 ARG UI_REPO
 ARG UI_REF
@@ -55,7 +55,11 @@ ARG UI_REF
 RUN apk add --no-cache git
 RUN git clone --depth 1 --branch ${UI_REF} ${UI_REPO} /src
 
-FROM ${NODE_IMAGE} AS ui-builder
+# The UI is a static JS/HTML/CSS bundle with no native code - it doesn't
+# need to be rebuilt per target platform. Pinning to $BUILDPLATFORM means
+# it's built once, natively, instead of once per architecture under slow
+# (and occasionally network-timeout-flaky) QEMU emulation.
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS ui-builder
 
 ENV PUBLIC_URL="./"
 
@@ -63,7 +67,9 @@ COPY --from=ui-src /src /ui
 
 WORKDIR /ui
 
-RUN yarn install && yarn build
+RUN yarn config set network-timeout 600000 && \
+	yarn install && \
+	yarn build
 
 ########################################################################
 # Bundle
