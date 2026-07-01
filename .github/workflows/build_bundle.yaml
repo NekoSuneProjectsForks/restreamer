@@ -2,7 +2,21 @@ name: 'Build restreamer latest images'
 
 on:
     workflow_dispatch:
+        inputs:
+            registry:
+                description: 'Where to push the built images'
+                type: choice
+                default: both
+                options:
+                    - github
+                    - dockerhub
+                    - both
     workflow_call:
+        inputs:
+            registry:
+                description: 'Where to push the built images (github, dockerhub, or both)'
+                type: string
+                default: both
     push:
         branches-ignore:
             - '**'
@@ -14,11 +28,17 @@ jobs:
             uiversion: ${{ steps.restreamerui.outputs.version }}
             bundleversion: ${{ steps.restreamerui.outputs.bundle }}
             coreversion: ${{ steps.core.outputs.version }}
+            registry: ${{ steps.registry.outputs.value }}
         steps:
-            - name: Checkout restreamr-ui repo
+            - name: Resolve registry choice
+              id: registry
+              run: |
+                  echo "value=${{ inputs.registry || 'both' }}" >> "$GITHUB_OUTPUT"
+
+            - name: Checkout restreamer-ui repo
               uses: actions/checkout@v4
               with:
-                  repository: datarhei/restreamer-ui
+                  repository: nekosuneprojectsforks/restreamer-ui
                   path: ./ui
 
             - name: Get latest version and bundle from UI
@@ -30,7 +50,7 @@ jobs:
             - name: Checkout core repo
               uses: actions/checkout@v4
               with:
-                  repository: datarhei/core
+                  repository: nekosuneprojectsforks/core
                   path: ./core
 
             - name: Get latest version from core
@@ -43,10 +63,14 @@ jobs:
                   echo "ui: ${{ steps.restreamerui.outputs.version }}"
                   echo "bundle: ${{ steps.restreamerui.outputs.bundle }}"
                   echo "core: ${{ steps.core.outputs.version }}"
+                  echo "registry: ${{ steps.registry.outputs.value }}"
 
     docker:
         needs: versions
         runs-on: [self-hosted]
+        permissions:
+            contents: read
+            packages: write
         strategy:
             matrix:
                 include:
@@ -74,12 +98,27 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v4
 
+            - name: Determine target images
+              id: images
+              env:
+                  REGISTRY: ${{ needs.versions.outputs.registry }}
+              run: |
+                  images=""
+                  if [ "$REGISTRY" != "dockerhub" ]; then
+                      images="${images}ghcr.io/${{ github.repository }}\n"
+                  fi
+                  if [ "$REGISTRY" != "github" ]; then
+                      images="${images}nekosuneprojectsforks/restreamer\n"
+                  fi
+                  echo "list<<EOF" >> "$GITHUB_OUTPUT"
+                  echo -e "$images" >> "$GITHUB_OUTPUT"
+                  echo "EOF" >> "$GITHUB_OUTPUT"
+
             - name: Docker meta
               id: meta
               uses: docker/metadata-action@v5
               with:
-                  images: |
-                      datarhei/restreamer
+                  images: ${{ steps.images.outputs.list }}
                   tags: |
                       type=raw,value=${{ matrix.prefix }}${{ needs.versions.outputs.bundleversion }}-ui${{ needs.versions.outputs.uiversion }}-${{ matrix.core }}-${{ matrix.ffmpeg }}
                       type=raw,value=${{ matrix.prefix }}${{ needs.versions.outputs.bundleversion }}
@@ -94,8 +133,16 @@ jobs:
               id: buildx
               uses: docker/setup-buildx-action@master
 
+            - name: Login to GitHub Container Registry
+              if: github.event_name != 'pull_request' && needs.versions.outputs.registry != 'dockerhub'
+              uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
             - name: Login to DockerHub
-              if: github.event_name != 'pull_request'
+              if: github.event_name != 'pull_request' && needs.versions.outputs.registry != 'github'
               uses: docker/login-action@v3
               with:
                   username: ${{ secrets.DOCKER_USERNAME }}
@@ -108,8 +155,10 @@ jobs:
                   context: .
                   file: ./Dockerfile
                   build-args: |
-                      RESTREAMER_UI_IMAGE=datarhei/restreamer-ui:${{ matrix.ui }}
-                      CORE_IMAGE=datarhei/base:${{ matrix.core }}
+                      CORE_REPO=https://github.com/nekosuneprojectsforks/core.git
+                      CORE_REF=main
+                      UI_REPO=https://github.com/nekosuneprojectsforks/restreamer-ui.git
+                      UI_REF=main
                       FFMPEG_IMAGE=datarhei/base:${{ matrix.ffmpeg }}
                   platforms: ${{ matrix.platforms }}
                   push: true

@@ -2,7 +2,21 @@ name: 'Build restreamer dev images'
 
 on:
     workflow_dispatch:
+        inputs:
+            registry:
+                description: 'Where to push the built images'
+                type: choice
+                default: both
+                options:
+                    - github
+                    - dockerhub
+                    - both
     workflow_call:
+        inputs:
+            registry:
+                description: 'Where to push the built images (github, dockerhub, or both)'
+                type: string
+                default: both
     schedule:
         - cron: '37 5 * * *'
     push:
@@ -12,6 +26,9 @@ on:
 jobs:
     docker:
         runs-on: [self-hosted]
+        permissions:
+            contents: read
+            packages: write
         strategy:
             matrix:
                 include:
@@ -36,15 +53,35 @@ jobs:
                       platforms: linux/amd64
                       name: cuda-dev
         steps:
+            - name: Resolve registry choice
+              id: registry
+              run: |
+                  echo "value=${{ inputs.registry || 'both' }}" >> "$GITHUB_OUTPUT"
+
             - name: Checkout
               uses: actions/checkout@v4
+
+            - name: Determine target images
+              id: images
+              env:
+                  REGISTRY: ${{ steps.registry.outputs.value }}
+              run: |
+                  images=""
+                  if [ "$REGISTRY" != "dockerhub" ]; then
+                      images="${images}ghcr.io/${{ github.repository }}\n"
+                  fi
+                  if [ "$REGISTRY" != "github" ]; then
+                      images="${images}nekosuneprojectsforks/restreamer\n"
+                  fi
+                  echo "list<<EOF" >> "$GITHUB_OUTPUT"
+                  echo -e "$images" >> "$GITHUB_OUTPUT"
+                  echo "EOF" >> "$GITHUB_OUTPUT"
 
             - name: Docker meta
               id: meta
               uses: docker/metadata-action@v5
               with:
-                  images: |
-                      datarhei/restreamer
+                  images: ${{ steps.images.outputs.list }}
                   tags: |
                       type=raw,value=${{ matrix.name }}
 
@@ -57,8 +94,16 @@ jobs:
               id: buildx
               uses: docker/setup-buildx-action@master
 
+            - name: Login to GitHub Container Registry
+              if: github.event_name != 'pull_request' && steps.registry.outputs.value != 'dockerhub'
+              uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
             - name: Login to DockerHub
-              if: github.event_name != 'pull_request'
+              if: github.event_name != 'pull_request' && steps.registry.outputs.value != 'github'
               uses: docker/login-action@v3
               with:
                   username: ${{ secrets.DOCKER_USERNAME }}
@@ -71,8 +116,10 @@ jobs:
                   context: .
                   file: ./Dockerfile
                   build-args: |
-                      RESTREAMER_UI_IMAGE=datarhei/restreamer-ui:${{ matrix.ui }}
-                      CORE_IMAGE=datarhei/base:${{ matrix.core }}
+                      CORE_REPO=https://github.com/nekosuneprojectsforks/core.git
+                      CORE_REF=main
+                      UI_REPO=https://github.com/nekosuneprojectsforks/restreamer-ui.git
+                      UI_REF=main
                       FFMPEG_IMAGE=datarhei/base:${{ matrix.ffmpeg }}
                   platforms: ${{ matrix.platforms }}
                   push: true

@@ -10,9 +10,9 @@
 #   docker build --build-arg CORE_REF=my-branch .
 ########################################################################
 
-ARG CORE_REPO=https://github.com/NekoSuneProjectsForks/core.git
+ARG CORE_REPO=https://github.com/nekosuneprojectsforks/core.git
 ARG CORE_REF=main
-ARG UI_REPO=https://github.com/NekoSuneProjectsForks/restreamer-ui.git
+ARG UI_REPO=https://github.com/nekosuneprojectsforks/restreamer-ui.git
 ARG UI_REF=main
 
 ARG GOLANG_IMAGE=golang:1.22-alpine3.19
@@ -76,7 +76,7 @@ COPY --from=core-builder /dist/core/ffmigrate /core/bin/ffmigrate
 COPY --from=core-builder /dist/core/mime.types /core/mime.types
 COPY --from=ui-builder /ui/build /core/ui
 
-ADD https://raw.githubusercontent.com/datarhei/restreamer/2.x/CHANGELOG.md /core/ui/CHANGELOG.md
+ADD https://raw.githubusercontent.com/nekosuneprojectsforks/restreamer/2.x/CHANGELOG.md /core/ui/CHANGELOG.md
 COPY ./run.sh /core/bin/run.sh
 COPY ./ui-root /core/ui-root
 
