@@ -100,6 +100,24 @@ docker run -d --restart=always --name restreamer \
 
 *For external access (http/s, rtmp/s, srt), port forwarding from your Internet-Router to the Restreamer's internal IP address may need to be set up.*
 
+### WebRTC (WHIP/WHEP)
+
+This fork builds CORE and the UI from source and adds WHIP (ingest) and WHEP (egress) support over WebRTC, off by default. To enable it, add `-e CORE_WEBRTC_ENABLE=true` and publish the ICE/media UDP port:
+
+```sh
+docker run -d --restart=always --name restreamer \
+   -v /opt/restreamer/config:/core/config -v /opt/restreamer/data:/core/data \
+   -p 8080:8080 -p 8181:8181 \
+   -p 1935:1935 -p 1936:1936 \
+   -p 6000:6000/udp \
+   -p 8189:8189/udp \
+   -e CORE_WEBRTC_ENABLE=true \
+   -e CORE_WEBRTC_NAT1TO1_IPS=your.public.host.or.ip \
+   nekosuneprojectsforks/restreamer:latest
+```
+
+`CORE_WEBRTC_NAT1TO1_IPS` should be the address WHIP/WHEP clients can actually reach this container at - set it whenever you're behind Docker's own NAT/port-mapping or a router, otherwise the WebRTC ICE candidates advertise the container's internal IP and remote peers won't be able to connect. See CORE's `CORE_WEBRTC_*` environment variables for the rest of the knobs (token, relay port range, STUN/TURN servers).
+
 ## Documentation
 
 Documentation is available on [docs.datarhei.com/restreamer](https://docs.datarhei.com/restreamer). We give many pieces of information, from setting up a camera, embedding your player upon your website, and streaming to services like, e.g., YouTube-Live, and many more.
